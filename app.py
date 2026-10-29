@@ -113,14 +113,17 @@ class App:
     def controls_keyboard(self):
         return InlineKeyboardMarkup([
             [
-                InlineKeyboardButton("▶️ Resume", callback_data="runner:resume"),
-                InlineKeyboardButton("⏸ Pause", callback_data="runner:pause"),
+                InlineKeyboardButton("â¶ï¸ Resume", callback_data="runner:resume"),
+                InlineKeyboardButton("â¸ Pause", callback_data="runner:pause"),
             ],
-            [InlineKeyboardButton("🔄 Status", callback_data="runner:status")],
+            [InlineKeyboardButton("ð Status", callback_data="runner:status")],
+            [InlineKeyboardButton("ð¤ Session Info", callback_data="runner:session")],
+            [InlineKeyboardButton("ð Join Group", callback_data="runner:join"),
+             InlineKeyboardButton("ðª Leave Group", callback_data="runner:leave")],
         ])
 
     def register_handlers(self):
-        @self.control_bot.on_message(filters.private & filters.command(["start", "help", "status", "pause", "resume"]))
+        @self.control_bot.on_message(filters.private & filters.command(["start", "help", "status", "pause", "resume", "session", "join", "leave"]))
         async def command_handler(_, message: Message):
             uid = message.from_user.id if message.from_user else None
             command = (message.command or [""])[0].lower()
@@ -129,30 +132,82 @@ class App:
                     await message.reply_text("This control panel is restricted to authorized administrators.")
                     return
                 await message.reply_text(
-                    "Game Runner Control Panel\n\n"
-                    "/status — show runner state\n"
-                    "/pause — pause replies\n"
-                    "/resume — resume replies\n\n"
-                    "Use the buttons below to control the runner.",
+                    "ð® **GAME RUNNER â¢ CONTROL CENTER**\n\n"
+                    "Manage the connected Telegram account and game runner from this private chat.\n\n"
+                    "ð¤ /session â connected account details\n"
+                    "ð /join @groupusername â join a public group or invite link\n"
+                    "ðª /leave @groupusername â leave a group\n"
+                    "ð /status â runner and target status\n"
+                    "â¸ /pause â pause automatic replies\n"
+                    "â¶ï¸ /resume â resume automatic replies\n\n"
+                    "â ï¸ The session string is secret and is never displayed here.",
                     reply_markup=self.controls_keyboard(),
-                )
+                    )
                 return
             if not self.is_admin(uid):
                 await message.reply_text("Not authorized.")
                 return
-            if command == "status":
-                paused = await self.db.is_paused()
+            if command == "session":
+                me = await self.user_client.get_me()
+                username = f"@{me.username}" if me.username else "Not set"
+                phone = f"+{me.phone_number}" if me.phone_number else "Hidden / unavailable"
                 await message.reply_text(
-                    f"Runner status: {'⏸ PAUSED' if paused else '▶️ ACTIVE'}\n"
-                    f"Target group: {self.cfg['target_group_id']}",
+                    "ð¤ **CONNECTED USER SESSION**\n\n"
+                    f"â¢ Name: {me.first_name or 'Unknown'}\n"
+                    f"â¢ Username: {username}\n"
+                    f"â¢ Telegram account ID: `{me.id}`\n"
+                    f"â¢ Phone: {phone}\n"
+                    "â¢ Connection: ð¢ Authenticated\n\n"
+                    "This is the account ID, not the secret session string."
+                )
+            elif command == "join":
+                if len(message.command) < 2:
+                    await message.reply_text("Usage: `/join @publicgroup` or `/join https://t.me/+invitecode`", reply_markup=self.controls_keyboard())
+                    return
+                target = message.text.split(maxsplit=1)[1].strip()
+                try:
+                    chat = await self.user_client.join_chat(target)
+                    await message.reply_text(f"â Joined successfully\nGroup: {chat.title or 'Telegram chat'}\nChat ID: `{chat.id}`", reply_markup=self.controls_keyboard())
+                except Exception as exc:
+                    await message.reply_text(f"â Could not join that chat.\n`{type(exc).__name__}: {str(exc)[:350]}`\nCheck the username/invite link and ensure the account is allowed to join.")
+            elif command == "leave":
+                if len(message.command) < 2:
+                    await message.reply_text("Usage: `/leave @groupusername` or `/leave -1001234567890`\nTo leave the configured target group: `/leave target`", reply_markup=self.controls_keyboard())
+                    return
+                target = message.text.split(maxsplit=1)[1].strip()
+                if target.lower() == "target":
+                    target = str(self.cfg["target_group_id"])
+                try:
+                    chat = await self.user_client.get_chat(target)
+                    await self.user_client.leave_chat(chat.id)
+                    await message.reply_text(f"ðª Left group successfully\nGroup: {chat.title or 'Telegram chat'}\nChat ID: `{chat.id}`", reply_markup=self.controls_keyboard())
+                except Exception as exc:
+                    await message.reply_text(f"â Could not leave that chat.\n`{type(exc).__name__}: {str(exc)[:350]}`")
+            elif command == "status":
+                paused = await self.db.is_paused()
+                me = await self.user_client.get_me()
+                try:
+                    chat = await self.user_client.get_chat(self.cfg["target_group_id"])
+                    group_line = f"{chat.title or 'Target group'} (`{chat.id}`)"
+                    membership = await self.user_client.get_chat_member(chat.id, me.id)
+                    member_line = f"Accessible ({membership.status})"
+                except Exception as exc:
+                    group_line = f"`{self.cfg['target_group_id']}`"
+                    member_line = f"Not accessible ({type(exc).__name__})"
+                await message.reply_text(
+                    "ð **RUNNER STATUS**\n\n"
+                    f"Runner: {'â¸ PAUSED' if paused else 'â¶ï¸ ACTIVE'}\n"
+                    f"Session account: `{me.id}` (@{me.username or 'no_username'})\n"
+                    f"Target: {group_line}\n"
+                    f"Membership: {member_line}",
                     reply_markup=self.controls_keyboard(),
                 )
             elif command == "pause":
                 await self.db.set_paused(True, uid)
-                await message.reply_text("⏸ Runner paused.", reply_markup=self.controls_keyboard())
+                await message.reply_text("â¸ Runner paused.", reply_markup=self.controls_keyboard())
             elif command == "resume":
                 await self.db.set_paused(False, uid)
-                await message.reply_text("▶️ Runner resumed.", reply_markup=self.controls_keyboard())
+                await message.reply_text("â¶ï¸ Runner resumed.", reply_markup=self.controls_keyboard())
 
         @self.control_bot.on_callback_query()
         async def callback_handler(_, query: CallbackQuery):
@@ -169,7 +224,18 @@ class App:
                 response = "Runner resumed."
             elif action == "status":
                 paused = await self.db.is_paused()
-                response = f"Runner is {'PAUSED' if paused else 'ACTIVE'}."
+                me = await self.user_client.get_me()
+                response = f"Runner {'PAUSED' if paused else 'ACTIVE'} â¢ session account ID {me.id}"
+            elif action == "session":
+                me = await self.user_client.get_me()
+                await query.answer(f"Account ID: {me.id} â¢ @{me.username or 'no_username'}", show_alert=True)
+                return
+            elif action == "join":
+                await query.answer("Send /join @publicgroup or /join https://t.me/+invitecode", show_alert=True)
+                return
+            elif action == "leave":
+                await query.answer("Send /leave @groupusername, /leave -100... or /leave target", show_alert=True)
+                return
             else:
                 await query.answer("Unknown action.", show_alert=True)
                 return
