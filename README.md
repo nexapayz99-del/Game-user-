@@ -1,8 +1,10 @@
 # Game User — single-owner Pyrogram game assistant
 
+                         AAKASH👑
+
 This is a hardened replacement architecture for the uploaded prototype. It uses:
 - One owner-authorized Pyrogram user session, supplied locally as `USER_SESSION`
-- A separate Telegram bot token for `/status`, `/pause`, and `/resume`
+- A separate Telegram bot token for `/status`, `/pause`, `/resume`, `/session`, `/join`, and `/leave`
 - MongoDB via Motor for persistent run state and event/error metadata
 - A configurable target group and optional game-bot username filter
 - Word-length parsing for common prompt formats
@@ -64,13 +66,18 @@ Restart after changing `.env`:
 sudo systemctl restart game-user
 ```
 
-## Commands
-- `/status` — show whether the runner is active
-- `/pause` — pause automatic replies
-- `/resume` — resume automatic replies
-- `/help` — command summary
+## Private control-panel commands
+- `/start` or `/help` — open the control panel
+- `/status` — runner state, target group, membership/access status, account ID
+- `/session` — show the connected account's Telegram ID and username (never reveals the secret string session)
+- `/join @publicgroup` — join a public group/channel by username
+- `/join https://t.me/+invitecode` — join using an invite link the account is permitted to use
+- `/leave @groupusername` — leave a group
+- `/leave -1001234567890` — leave a group by chat ID
+- `/leave target` — leave the configured target group
+- `/pause` and `/resume` — pause/resume automatic replies
 
-Commands and inline buttons are restricted to IDs in `ADMIN_IDS`.
+Commands and inline buttons are restricted to IDs in `ADMIN_IDS`. Join/leave changes membership only; the game runner still listens only to `TARGET_GROUP_ID`. If you leave that target, it cannot read or reply there until the account rejoins.
 
 ## Group configuration
 1. Add the user account (the account represented by `USER_SESSION`) to the target group.
