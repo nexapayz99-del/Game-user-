@@ -1,0 +1,23 @@
+[Unit]
+Description=Game User Pyrogram Assistant
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=YOUR_LINUX_USER
+WorkingDirectory=/opt/game-user
+EnvironmentFile=/opt/game-user/.env
+ExecStart=/opt/game-user/.venv/bin/python /opt/game-user/app.py
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGINT
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/game-user
+
+[Install]
+WantedBy=multi-user.target
