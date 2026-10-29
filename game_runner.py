@@ -1,19 +1,16 @@
 import os
 import asyncio
 from dotenv import load_dotenv
+load_dotenv()
+
 from pyrogram import Client, filters
 from pyrogram.errors import FloodWait
 import uvloop
-
-# Load environment variables from .env file
-load_dotenv()
+from db import get_all_sessions, get_bot_status, WORD_DICT 
 
 API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
 TARGET_GROUP = int(os.getenv("TARGET_GROUP"))
-
-# Import your database functions and word dictionary
-from db import get_all_sessions, WORD_DICT 
 
 async def run_userbots():
     sessions = await get_all_sessions()
@@ -33,6 +30,11 @@ async def run_userbots():
         
         @client.on_message(filters.chat(TARGET_GROUP) & filters.text)
         async def word_seek_handler(c, message):
+            # Check if bot is paused via the UI
+            is_active = await get_bot_status()
+            if not is_active:
+                return
+
             text = message.text.lower()
             target_length = None
             
@@ -42,15 +44,19 @@ async def run_userbots():
                     target_length = length
                     break
             
-            # Guess ALL words of that length
             if target_length and target_length in WORD_DICT:
                 words_to_guess = WORD_DICT[target_length]
                 
+                # Guess words with a strict 5-second delay
                 for guess in words_to_guess:
+                    # Check status again mid-loop in case you paused it while it was guessing
+                    if not await get_bot_status():
+                        break 
+                        
                     try:
                         await message.reply_text(guess.upper())
-                        # 1.5 second delay prevents rapid-fire spam bans
-                        await asyncio.sleep(1.5) 
+                        await asyncio.sleep(5.0) # 5 SECOND GAP PREVENTS RATE LIMITS
+                        
                     except FloodWait as e:
                         print(f"Hit rate limit. Sleeping for {e.value} seconds.")
                         await asyncio.sleep(e.value)
