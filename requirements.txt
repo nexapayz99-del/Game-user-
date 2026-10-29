@@ -3,3 +3,4 @@ tgcrypto
 motor
 pyromod
 uvloop
+python-dotenv
